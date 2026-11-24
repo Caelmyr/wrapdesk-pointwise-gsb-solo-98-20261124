@@ -62,12 +62,17 @@
               <label>下沿右 x<input id="bottom_right" type="number" min="0" required></label>
               <label>上沿 y<input id="top" type="number" min="0" required></label>
               <label>下沿 y<input id="bottom" type="number" min="0" required></label>
-              <label>罐身直径 mm<input id="diameter" type="number" min="1" max="1000" step="any" required></label>
+              <label>上沿直径 mm<input id="top_diameter" type="number" min="1" max="1000" step="any" required></label>
+              <label>下沿直径 mm<input id="bottom_diameter" type="number" min="1" max="1000" step="any" required></label>
+              <label>统一横尺 mm<input id="diameter" type="number" min="1" max="1000" step="any" required></label>
               <label>标签高 mm<input id="height" type="number" min="1" max="1000" step="any" required></label>
               <label>起始角 °<input id="start" type="number" min="-80" max="75" step="any" required></label>
               <label>终止角 °<input id="end" type="number" min="-75" max="80" step="any" required></label>
               <label>像素 / mm<input id="density" type="number" min="1" max="16" step="any" required></label>
             </div>
+            <div class="ruler-advice" id="ruler-advice" aria-live="polite"></div>
+            <button type="button" id="adopt-ruler">采用建议横尺</button>
+            <p class="note">上下沿直径不同时，标定仍共用四角；平面稿宽度按统一横尺，点查与测线按所在高度的真实直径读毫米。</p>
             <div class="gap-controls"><p id="gap-count">无缺证框。</p><div id="gap-list"></div></div>
             <button class="accent" type="submit">应用标定与缺证框</button>
           </form>

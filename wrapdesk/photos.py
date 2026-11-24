@@ -44,7 +44,8 @@ def png(image):
 DEMO_CALIBRATION = {
     "top": 80, "bottom": 347, "left": 152, "right": 548,
     "bottom_left": 152, "bottom_right": 548,
-    "diameter": 73, "height": 54, "start": -70, "end": 70, "density": 5,
+    "top_diameter": 73, "bottom_diameter": 73, "diameter": 73,
+    "height": 54, "start": -70, "end": 70, "density": 5,
 }
 DEMO_OCCLUSIONS = [[458, 118, 510, 187]]
 

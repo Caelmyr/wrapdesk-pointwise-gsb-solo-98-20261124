@@ -8,7 +8,7 @@ from flask import Blueprint, jsonify, render_template, request, send_file
 from werkzeug.exceptions import NotFound
 
 from image_lab import create_app as create_preparation
-from image_lab.validation import Invalid, object_value
+from image_lab.validation import Invalid, number, object_value
 
 from . import geometry, photos
 from .library import Library
@@ -16,6 +16,27 @@ from .library import Library
 
 def body():
     return object_value(request.get_json(silent=True), "瓶标操作")
+
+
+def ruler_parameters():
+    """Read the two measured diameters and the proof angles for ruler advice.
+
+    ``top``/``bottom`` fall back to a single ``diameter`` so that an old
+    equal-diameter calibration still yields advice.  ``ruler`` is the ruler
+    the caller is considering; when absent only the suggestion is reported.
+    """
+    fallback = request.args.get("diameter")
+    top = number(request.args.get("top", fallback), "上沿直径", 1, 1000)
+    bottom = number(request.args.get("bottom", fallback), "下沿直径", 1, 1000)
+    start = number(request.args.get("start", -70), "起始角", -80, 75)
+    end = number(request.args.get("end", 70), "终止角", -75, 80)
+    if end - start < 5:
+        raise Invalid("起止角之间至少留 5°。")
+    values = {"top_diameter": top, "bottom_diameter": bottom, "start": start, "end": end}
+    ruler = request.args.get("ruler", request.args.get("adopted"))
+    if ruler is not None:
+        values["diameter"] = number(ruler, "统一横尺直径", 1, 1000)
+    return values
 
 
 def file_png(data, name):
@@ -88,6 +109,10 @@ def create_app(root):
         _, source, model, boxes = analysis(identifier)
         metadata, _ = geometry.render(source, model, boxes)
         return jsonify(metadata)
+
+    @desk.get("/ruler")
+    def ruler():
+        return jsonify(geometry.ruler_advice(ruler_parameters()))
 
     @desk.get("/photos/<identifier>/flatten.png")
     def flattened(identifier):

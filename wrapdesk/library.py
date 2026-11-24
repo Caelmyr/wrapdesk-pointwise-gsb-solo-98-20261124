@@ -52,6 +52,19 @@ def check_revision(record, revision):
         raise Conflict("原片设置已改变，请重开此原片。")
 
 
+def normalise(record):
+    """Fill the two edge diameters on records written before the frustum model.
+
+    Older records carry one ``diameter`` for a true cylinder; both edges take
+    that value, so their readings and proofs stay exactly as they were.
+    """
+    calibration = record.get("calibration")
+    if calibration is not None:
+        calibration.setdefault("top_diameter", calibration["diameter"])
+        calibration.setdefault("bottom_diameter", calibration["diameter"])
+    return record
+
+
 class Library:
     def __init__(self, root):
         self.root = root / "label-photos"
@@ -62,7 +75,7 @@ class Library:
         return self.root / key(identifier)
 
     def record(self, identifier):
-        return read(self.folder(identifier) / "photo.json")
+        return normalise(read(self.folder(identifier) / "photo.json"))
 
     def source(self, identifier):
         self.record(identifier)
@@ -132,7 +145,9 @@ class Library:
         return self.folder(identifier) / "reports" / key(report)
 
     def report(self, identifier, report):
-        return read(self.report_path(identifier, report) / "report.json")
+        saved = normalise(read(self.report_path(identifier, report) / "report.json"))
+        saved.setdefault("ruler", geometry.ruler_advice(saved["calibration"]))
+        return saved
 
     def archive(self, identifier, revision, label, selection):
         with self.lock:
@@ -150,6 +165,7 @@ class Library:
                 "id": uuid4().hex[:16], "title": title(label, "瓶标检查稿"), "created": timestamp(),
                 "photo_id": identifier, "source_sha256": record["source_sha256"], "revision": revision,
                 "calibration": record["calibration"], "occlusions": boxes,
+                "ruler": geometry.ruler_advice(record["calibration"]),
                 "geometry": metadata, "transect": profile,
             }
             target = self.report_path(identifier, saved["id"])

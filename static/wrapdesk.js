@@ -2,10 +2,11 @@
 
 const byId = id => document.getElementById(id);
 const values = ['left', 'right', 'bottom_left', 'bottom_right', 'top', 'bottom',
-    'diameter', 'height', 'start', 'end', 'density'];
+    'top_diameter', 'bottom_diameter', 'diameter', 'height', 'start', 'end', 'density'];
 const view = {
     photo: null, report: null, source: null, flat: null, meta: null, occlusions: [],
     draftPoints: [], tool: '', measureStart: null, line: null, pinpoint: null,
+    advice: null, rulerTouched: false,
 };
 let busy = false;
 
@@ -59,6 +60,59 @@ function route() {
 function displaySettings() {
     const entered = Object.fromEntries(values.map(name => [name, byId(name).valueAsNumber]));
     return view.report ? view.report.calibration : entered;
+}
+
+function signed(value) {
+    return `${value >= 0 ? '多量' : '少量'} ${Math.abs(value).toFixed(2)} mm`;
+}
+
+async function advice() {
+    const top = byId('top_diameter').valueAsNumber;
+    const bottom = byId('bottom_diameter').valueAsNumber;
+    const start = byId('start').valueAsNumber;
+    const end = byId('end').valueAsNumber;
+    if (![top, bottom, start, end].every(Number.isFinite) || end - start < 5) return null;
+    const ruler = byId('diameter').valueAsNumber;
+    const query = new URLSearchParams({top, bottom, start, end});
+    if (Number.isFinite(ruler)) query.set('ruler', ruler);
+    return api('/ruler?' + query);
+}
+
+async function refreshAdvice() {
+    view.advice = await advice();
+    renderRuler();
+}
+
+function offsetLine(arc, offset, label) {
+    const className = offset > 1e-9 ? 'offset-over' : offset < -1e-9 ? 'offset-under' : '';
+    return `${label} ${arc.toFixed(2)} mm，用这把尺<span class="${className}">${signed(offset)}</span>`;
+}
+
+function adviceParagraph(parts) {
+    const line = document.createElement('p');
+    line.innerHTML = parts;
+    return line;
+}
+
+function renderRuler() {
+    const advice = view.advice;
+    const target = byId('ruler-advice');
+    if (!advice || !advice.suggested) {
+        target.textContent = '填入上下沿直径后给出统一横尺建议。';
+        return;
+    }
+    const suggested = advice.suggested;
+    const using = advice.adopted || suggested;
+    const isSuggested = !advice.adopted || Math.abs(using.ruler_arc_mm - suggested.ruler_arc_mm) < 1e-9;
+    target.replaceChildren(
+        adviceParagraph(`建议统一横尺 <strong>⌀ ${advice.suggested_diameter.toFixed(2)} mm</strong>` +
+            (isSuggested ? '（与当前横尺相同）' : '') + `；平面稿上这把尺读 ${using.ruler_arc_mm.toFixed(2)} mm。`),
+        adviceParagraph(`${offsetLine(using.top_arc_mm, using.top_offset_mm, '上沿实物弧')}；` +
+            `${offsetLine(using.bottom_arc_mm, using.bottom_offset_mm, '下沿实物弧')}。`));
+    if (!isSuggested) {
+        target.append(adviceParagraph(
+            `若改用建议横尺：上沿${signed(suggested.top_offset_mm)}，下沿${signed(suggested.bottom_offset_mm)}，两端误差相等。`));
+    }
 }
 
 function revision() {
@@ -153,13 +207,23 @@ function drawFlat() {
     if (view.pinpoint) dot(ctx, [view.pinpoint.column, view.pinpoint.row], '#ffe084');
 }
 
+function rowDiameter(row) {
+    const data = view.meta;
+    if (!data || !Number.isFinite(data.top_diameter) || !Number.isFinite(data.height)) return null;
+    return data.top_diameter + (data.bottom_diameter - data.top_diameter) * (row / Math.max(1, data.height - 1));
+}
+
 function renderLine() {
     const line = view.line;
     byId('line-result').hidden = !line;
     byId('clear-line').disabled = !line || Boolean(view.report);
     if (!line) return;
+    const diameter = Number.isFinite(line.diameter_mm) ? line.diameter_mm : rowDiameter(line.row);
+    const ruler = Number.isFinite(line.ruler_span_mm) ? ` · 若按横尺读 ${line.ruler_span_mm.toFixed(2)} mm` : '';
     byId('line-details').textContent =
-        `横向弧长 ${line.span_mm.toFixed(2)} mm · 连续实见合计 ${line.observed_mm.toFixed(2)} mm · 第 ${line.row + 1} 行`;
+        `本行实物弧长 ${line.span_mm.toFixed(2)} mm${ruler} · 连续实见合计 ${line.observed_mm.toFixed(2)} mm` +
+        (Number.isFinite(diameter) ? ` · 本行直径 ⌀${diameter.toFixed(2)} mm` : '') +
+        ` · 第 ${line.row + 1} 行`;
     const canvas = byId('profile');
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -205,8 +269,9 @@ async function render() {
     const report = view.report;
     const calibration = report ? report.calibration : photo.calibration;
     const reportRoute = report && route() + '/reports/' + report.id;
+    const defaults = {top_diameter: 70, bottom_diameter: 70, diameter: 70, height: 50, start: -70, end: 70, density: 5};
     for (const name of values) {
-        byId(name).value = calibration?.[name] ?? ({diameter: 70, height: 50, start: -70, end: 70, density: 5})[name] ?? '';
+        byId(name).value = calibration?.[name] ?? defaults[name] ?? '';
         byId(name).disabled = Boolean(report);
     }
     view.occlusions = (report ? report.occlusions : photo.occlusions).map(box => [...box]);
@@ -217,6 +282,8 @@ async function render() {
     view.measureStart = null;
     view.meta = null;
     view.flat = null;
+    view.advice = report ? report.ruler || await advice() : await advice();
+    view.rulerTouched = false;
     if (calibration) {
         const url = report ? reportRoute + '/flatten.png' : route() + '/flatten.png?' + revision();
         [view.meta, view.flat] = await Promise.all([
@@ -225,16 +292,21 @@ async function render() {
         ]);
         setDownload('flat-download', url + (report ? '?' : '&') + 'download');
         const data = view.meta;
+        const edges = Number.isFinite(data.top_diameter)
+            ? ` · 上 ⌀${data.top_diameter.toFixed(2)} / 下 ⌀${data.bottom_diameter.toFixed(2)} · 横尺 ⌀${data.ruler_diameter.toFixed(2)}`
+            : '';
         byId('flat-meta').textContent =
-            `${data.width} × ${data.height} px · 弧宽 ${data.arc_mm.toFixed(2)} mm · 实见 ${(100 * data.visible_pixels / data.total_pixels).toFixed(1)}%`;
+            `${data.width} × ${data.height} px · 横尺弧宽 ${data.arc_mm.toFixed(2)} mm${edges} · 实见 ${(100 * data.visible_pixels / data.total_pixels).toFixed(1)}%`;
     } else {
         setDownload('flat-download', null);
         byId('flat-meta').textContent = '应用标定后查看。';
     }
+    renderRuler();
     setDownload('line-download', report?.transect ? reportRoute + '/transect.csv' : null);
     setDownload('source-download', route() + '/source.png?download');
     for (const target of ['mark-body', 'mark-gap']) byId(target).disabled = Boolean(report);
     byId('calibration').querySelector('[type="submit"]').disabled = Boolean(report);
+    byId('adopt-ruler').disabled = Boolean(report);
     byId('measure').disabled = Boolean(report) || !calibration;
     byId('save').disabled = Boolean(report) || !calibration;
     byId('report-title').disabled = Boolean(report);
@@ -270,6 +342,31 @@ function pixel(event) {
 byId('start').addEventListener('input', () => message('应用后更新角度范围。'));
 byId('end').addEventListener('input', () => message('应用后更新角度范围。'));
 for (const name of values.slice(0, 6)) byId(name).addEventListener('input', drawSource);
+function syncSuggestedRuler() {
+    if (view.rulerTouched || view.report) return;
+    const top = byId('top_diameter').valueAsNumber;
+    const bottom = byId('bottom_diameter').valueAsNumber;
+    if (Number.isFinite(top) && Number.isFinite(bottom)) byId('diameter').value = String((top + bottom) / 2);
+}
+byId('top_diameter').addEventListener('input', syncSuggestedRuler);
+byId('bottom_diameter').addEventListener('input', syncSuggestedRuler);
+byId('diameter').addEventListener('input', () => { view.rulerTouched = true; });
+for (const name of ['top_diameter', 'bottom_diameter', 'start', 'end', 'diameter']) {
+    byId(name).addEventListener('input', run(refreshAdvice));
+}
+byId('adopt-ruler').addEventListener('click', run(async () => {
+    if (view.report) return;
+    const current = await advice();
+    if (!current) {
+        message('先填入上下沿直径和起止角。', true);
+        return;
+    }
+    byId('diameter').value = String(current.suggested_diameter);
+    view.rulerTouched = false;
+    view.advice = await advice();
+    renderRuler();
+    message(`已把统一横尺设为 ⌀ ${current.suggested_diameter.toFixed(2)} mm，应用标定后生效。`);
+}));
 byId('demo').addEventListener('click', run(async () => {
     const photo = await api('/demo', 'POST');
     await openPhoto(photo.id);
@@ -364,7 +461,8 @@ byId('flattened').addEventListener('click', run(async event => {
         const point = await api(route() + `/probe?${version}&column=${column}&row=${row}`);
         view.pinpoint = point;
         const source = `原照 (${point.source_x.toFixed(1)}, ${point.source_y.toFixed(1)}) px`;
-        const arc = `${point.angle.toFixed(2)}° · 弧距 ${point.arc_mm.toFixed(2)} mm · 高度 ${point.height_mm.toFixed(2)} mm`;
+        const diameter = Number.isFinite(point.diameter_mm) ? ` · 本行直径 ⌀${point.diameter_mm.toFixed(2)} mm` : '';
+        const arc = `${point.angle.toFixed(2)}° · 弧距 ${point.arc_mm.toFixed(2)} mm · 高度 ${point.height_mm.toFixed(2)} mm${diameter}`;
         byId('probe-result').textContent = point.visible
             ? `${source} · ${arc} · RGB ${point.rgb.join('/')}`
             : `${source} · ${arc} · 缺证，无色值`;
