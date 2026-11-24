@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WrapDesk｜瓶标平展</title>
+  <link rel="stylesheet" href="/static/wrapdesk.css">
+  <script defer src="/static/wrapdesk.js"></script>
+</head>
+<body>
+  <header class="mast">
+    <a class="identity" href="/">WrapDesk<span>弧面标签检查台</span></a>
+    <nav aria-label="工作区"><span aria-current="page">瓶标工作台</span><a href="/prepare">照片准备 ↗</a></nav>
+  </header>
+  <main>
+    <section class="heading">
+      <div><h1>瓶标平展</h1><p id="photo-name">在正面原照上标定罐身，展开前侧标签并复核实物尺寸。</p></div>
+      <div class="actions">
+        <label class="sr-only" for="photo-list">打开原照</label>
+        <select id="photo-list"><option value="">打开原照</option></select>
+        <button id="demo" type="button">打开合成练习</button>
+        <label class="button accent" for="upload">导入照片</label>
+        <input class="sr-only" id="upload" type="file" accept="image/png,image/jpeg,image/tiff">
+      </div>
+    </section>
+    <p id="status" class="status" role="status" aria-live="polite">请选择原照或打开练习。</p>
+    <section id="empty" class="empty">
+      <h2>沿罐身弧线读平面实尺</h2>
+      <p>从实物量出圆罐直径和标签高度。原照上的反光和遮挡可以框为缺证。</p>
+    </section>
+    <div class="desk" id="desk" hidden>
+      <div class="visuals">
+        <section class="panel">
+          <header class="section-head">
+            <div><h2>原照</h2><p id="source-meta"></p></div>
+            <div class="actions"><button type="button" id="mark-body">点选四个标定角</button><button type="button" id="mark-gap">标记缺证</button></div>
+          </header>
+          <div class="source-stage"><canvas id="source" aria-label="瓶标照片"></canvas></div>
+          <p id="source-hint" class="note">点选缺证框的两个角，应用后平展稿会留空。</p>
+        </section>
+        <section class="panel">
+          <header class="section-head">
+            <div><h2>平展稿</h2><p id="flat-meta">应用标定后查看。</p></div>
+            <div class="actions"><button type="button" id="measure" disabled>量横向弧长</button><button type="button" id="clear-line" disabled>清除测线</button></div>
+          </header>
+          <div class="flat-stage"><canvas id="flattened" aria-label="弧面标签平展图" hidden></canvas></div>
+          <p class="note" id="probe-result">在平展稿上点一下可在原照核对。</p>
+          <div class="line-result" id="line-result" hidden>
+            <p id="line-details"></p>
+            <canvas id="profile" width="720" height="112" aria-label="测线的亮度剖面，缺证处断开"></canvas>
+          </div>
+        </section>
+      </div>
+      <aside>
+        <section class="panel controls">
+          <h2>罐身标定</h2>
+          <form id="calibration">
+            <div class="fields">
+              <label>上沿左 x<input id="left" type="number" min="0" required></label>
+              <label>上沿右 x<input id="right" type="number" min="0" required></label>
+              <label>下沿左 x<input id="bottom_left" type="number" min="0" required></label>
+              <label>下沿右 x<input id="bottom_right" type="number" min="0" required></label>
+              <label>上沿 y<input id="top" type="number" min="0" required></label>
+              <label>下沿 y<input id="bottom" type="number" min="0" required></label>
+              <label>罐身直径 mm<input id="diameter" type="number" min="1" max="1000" step="any" required></label>
+              <label>标签高 mm<input id="height" type="number" min="1" max="1000" step="any" required></label>
+              <label>起始角 °<input id="start" type="number" min="-80" max="75" step="any" required></label>
+              <label>终止角 °<input id="end" type="number" min="-75" max="80" step="any" required></label>
+              <label>像素 / mm<input id="density" type="number" min="1" max="16" step="any" required></label>
+            </div>
+            <div class="gap-controls"><p id="gap-count">无缺证框。</p><div id="gap-list"></div></div>
+            <button class="accent" type="submit">应用标定与缺证框</button>
+          </form>
+        </section>
+        <section class="panel controls">
+          <h2>检查稿</h2>
+          <form id="archive" class="save-row">
+            <label class="sr-only" for="report-title">检查稿名</label>
+            <input id="report-title" placeholder="检查稿名" maxlength="100">
+            <button id="save" class="accent" disabled>封存</button>
+          </form>
+          <label class="sr-only" for="report-list">重开检查稿</label>
+          <select id="report-list"><option value="">当前原照</option></select>
+          <div class="downloads">
+            <a id="flat-download" download hidden>平展 PNG</a>
+            <a id="line-download" download hidden>测线 CSV</a>
+            <a id="source-download" download>原照 PNG</a>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>
