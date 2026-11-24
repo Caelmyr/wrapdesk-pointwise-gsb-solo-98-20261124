@@ -142,9 +142,9 @@ class Library:
             metadata, raster = geometry.render(source, model, boxes)
             profile = None
             if selection is not None:
-                values = list_value(selection, "测线", 3)
-                if len(values) != 3:
-                    raise Invalid("测线需要所在行和两个端点。")
+                values = list_value(selection, "测线", 4)
+                if len(values) not in (3, 4):
+                    raise Invalid("测线需要所在行和两个端点，斜线再带一个止行。")
                 profile = geometry.transect(source, model, boxes, *values)
             saved = {
                 "id": uuid4().hex[:16], "title": title(label, "瓶标检查稿"), "created": timestamp(),

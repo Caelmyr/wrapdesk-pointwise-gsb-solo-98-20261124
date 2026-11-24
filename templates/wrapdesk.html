@@ -49,6 +49,21 @@
             <p id="line-details"></p>
             <canvas id="profile" width="720" height="112" aria-label="测线的亮度剖面，缺证处断开"></canvas>
           </div>
+          <div class="barcode-panel" id="barcode-panel" hidden>
+            <h3>条码直线复扫</h3>
+            <p class="note">沿用当前测线的起止列，在其上下各 8 个平展像素内，枚举从左列一次扫到右列的直线；按原照实见列判别，碰到缺证即淘汰。</p>
+            <div class="barcode-fields">
+              <label>左端连续白边 · 原片列<input id="margin-left" type="number" min="1" value="4" required></label>
+              <label>右端连续白边 · 原片列<input id="margin-right" type="number" min="1" value="4" required></label>
+              <label>黑条最少跨原片列<input id="min-bar" type="number" min="1" value="2" required></label>
+              <label>黑白最小反差 0–255<input id="min-contrast" type="number" min="0" max="255" value="40" required></label>
+            </div>
+            <div class="actions">
+              <button type="button" id="barcode-search">搜索可复扫直线</button>
+              <button type="button" id="barcode-adopt" class="accent" hidden>采用推荐直线</button>
+            </div>
+            <p id="barcode-summary" class="note"></p>
+          </div>
         </section>
       </div>
       <aside>

@@ -110,8 +110,18 @@ def create_app(root):
     @desk.get("/photos/<identifier>/transect")
     def transect(identifier):
         _, source, model, boxes = analysis(identifier)
-        selected = (request.args.get("start"), request.args.get("end"), request.args.get("row"))
+        selected = (request.args.get("start"), request.args.get("end"),
+                    request.args.get("row"), request.args.get("end_row"))
         return jsonify(geometry.transect(source, model, boxes, *selected))
+
+    @desk.get("/photos/<identifier>/barcode-lines")
+    def barcode_lines(identifier):
+        _, source, model, boxes = analysis(identifier)
+        args = request.args
+        return jsonify(geometry.barcode_lines(
+            source, model, boxes, args.get("start"), args.get("end"), args.get("row"),
+            args.get("margin_left"), args.get("margin_right"),
+            args.get("min_bar_columns"), args.get("min_contrast")))
 
     @desk.get("/photos/<identifier>/reports")
     def reports(identifier):
@@ -140,7 +150,8 @@ def create_app(root):
         writer = csv.writer(table)
         writer.writerow(["column", "row", "source_x", "source_y", "angle", "arc_mm", "height_mm", "visible", "red", "green", "blue"])
         for item in profile["samples"]:
-            values = [item[name] for name in ("column", "row", "source_x", "source_y", "angle", "arc_mm", "height_mm", "visible")]
+            values = [item["column"], round(item["row"], 3), item["source_x"], item["source_y"],
+                      item["angle"], item["arc_mm"], item["height_mm"], item["visible"]]
             writer.writerow(values + (item["rgb"] if item["visible"] else ["", "", ""]))
         return send_file(BytesIO(table.getvalue().encode("utf-8")), mimetype="text/csv",
                          download_name="label-transect.csv", as_attachment=True, max_age=0)

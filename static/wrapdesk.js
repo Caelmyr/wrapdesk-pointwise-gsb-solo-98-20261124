@@ -5,7 +5,7 @@ const values = ['left', 'right', 'bottom_left', 'bottom_right', 'top', 'bottom',
     'diameter', 'height', 'start', 'end', 'density'];
 const view = {
     photo: null, report: null, source: null, flat: null, meta: null, occlusions: [],
-    draftPoints: [], tool: '', measureStart: null, line: null, pinpoint: null,
+    draftPoints: [], tool: '', measureStart: null, line: null, pinpoint: null, barcode: null,
 };
 let busy = false;
 
@@ -147,7 +147,8 @@ function drawFlat() {
     ctx.lineWidth = Math.max(1, canvas.width / 440);
     if (view.line) {
         ctx.strokeStyle = '#926020';
-        trace(ctx, [[view.line.start_column, view.line.row], [view.line.end_column, view.line.row]]);
+        const endRow = view.line.end_row ?? view.line.row;
+        trace(ctx, [[view.line.start_column, view.line.row], [view.line.end_column, endRow]]);
     }
     if (view.measureStart) dot(ctx, view.measureStart, '#f5cc60');
     if (view.pinpoint) dot(ctx, [view.pinpoint.column, view.pinpoint.row], '#ffe084');
@@ -158,8 +159,10 @@ function renderLine() {
     byId('line-result').hidden = !line;
     byId('clear-line').disabled = !line || Boolean(view.report);
     if (!line) return;
+    const endRow = line.end_row ?? line.row;
+    const shape = line.slanted ? `斜线 · 第 ${line.row + 1} 行到第 ${endRow + 1} 行` : `第 ${line.row + 1} 行`;
     byId('line-details').textContent =
-        `横向弧长 ${line.span_mm.toFixed(2)} mm · 连续实见合计 ${line.observed_mm.toFixed(2)} mm · 第 ${line.row + 1} 行`;
+        `横向弧长 ${line.span_mm.toFixed(2)} mm · 连续实见合计 ${line.observed_mm.toFixed(2)} mm · ${shape}`;
     const canvas = byId('profile');
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -180,6 +183,32 @@ function renderLine() {
         continuing = true;
     });
     ctx.stroke();
+}
+
+function renderBarcodePanel() {
+    const panel = byId('barcode-panel');
+    panel.hidden = !view.line || Boolean(view.report);
+    byId('barcode-adopt').hidden = true;
+    const summary = byId('barcode-summary');
+    const result = view.barcode;
+    if (!result) {
+        summary.textContent = view.line
+            ? '填入白边、黑条宽度与反差门槛后搜索。'
+            : '';
+        return;
+    }
+    if (!result.recommended) {
+        summary.textContent =
+            `检查了 ${result.checked_lines} 条直线，没有一条满足条件，保留原测线。`;
+        return;
+    }
+    const pick = result.recommended;
+    summary.textContent =
+        `候选 ${result.qualified_count} / ${result.checked_lines} 条，推荐第 ${pick.row + 1} 行到第 ${pick.end_row + 1} 行`
+        + `（${pick.row === pick.end_row ? '水平' : '略斜'}）：最弱反差 ${pick.weakest_contrast}`
+        + `，左端实见白边 ${pick.left_margin_columns} 列、右端 ${pick.right_margin_columns} 列`
+        + `，最细黑条 ${pick.min_black_span_columns} 个原片列，共过 ${pick.source_columns} 个原片列。`;
+    byId('barcode-adopt').hidden = false;
 }
 
 function renderGaps() {
@@ -213,6 +242,7 @@ async function render() {
     view.tool = '';
     view.draftPoints = [];
     view.line = report?.transect || null;
+    view.barcode = null;
     view.pinpoint = null;
     view.measureStart = null;
     view.meta = null;
@@ -247,6 +277,7 @@ async function render() {
     drawSource();
     drawFlat();
     renderLine();
+    renderBarcodePanel();
 }
 
 async function openPhoto(id) {
@@ -333,17 +364,54 @@ byId('measure').addEventListener('click', () => {
     view.tool = 'measure';
     view.measureStart = null;
     view.draftPoints = [];
+    view.barcode = null;
     drawSource();
     drawFlat();
+    renderBarcodePanel();
     message('在平展稿上点两次，同一行从第一点量到第二点的横向位置。');
 });
 byId('clear-line').addEventListener('click', () => {
     view.line = null;
     view.measureStart = null;
+    view.barcode = null;
     renderLine();
+    renderBarcodePanel();
     drawSource();
     drawFlat();
 });
+byId('barcode-search').addEventListener('click', run(async () => {
+    const line = view.line;
+    if (!line) {
+        message('先用量横向弧长定出条码的起止列。', true);
+        return;
+    }
+    const query = new URLSearchParams({
+        revision: String(view.photo.revision),
+        start: String(line.start_column), end: String(line.end_column), row: String(line.row),
+        margin_left: byId('margin-left').value, margin_right: byId('margin-right').value,
+        min_bar_columns: byId('min-bar').value, min_contrast: byId('min-contrast').value,
+    });
+    view.barcode = await api(route() + '/barcode-lines?' + query.toString());
+    renderBarcodePanel();
+    message(view.barcode.recommended ? '找到可复扫直线，已给出推荐。' : '没有符合条件的直线，保留原测线。');
+}));
+byId('barcode-adopt').addEventListener('click', run(async () => {
+    const pick = view.barcode?.recommended;
+    if (!pick) return;
+    const line = view.line;
+    const query = new URLSearchParams({
+        revision: String(view.photo.revision),
+        start: String(line.start_column), end: String(line.end_column),
+        row: String(pick.row), end_row: String(pick.end_row),
+    });
+    view.line = await api(route() + '/transect?' + query.toString());
+    view.barcode = null;
+    renderLine();
+    renderBarcodePanel();
+    drawSource();
+    drawFlat();
+    message('推荐直线已采用，逐点亮度按各点实际经过的原照位置读取。');
+}));
 byId('flattened').addEventListener('click', run(async event => {
     const [column, row] = pixel(event);
     if (view.tool === 'measure') {
@@ -356,7 +424,9 @@ byId('flattened').addEventListener('click', run(async event => {
             view.line = await api(route() + '/transect?' + query);
             view.tool = '';
             view.measureStart = null;
+            view.barcode = null;
             renderLine();
+            renderBarcodePanel();
             message('横向测线已更新。');
         }
     } else {
@@ -374,7 +444,11 @@ byId('flattened').addEventListener('click', run(async event => {
 }));
 byId('archive').addEventListener('submit', run(async () => {
     const line = view.line;
-    const transect = line ? [line.start_column, line.end_column, line.row] : null;
+    let transect = null;
+    if (line) {
+        transect = [line.start_column, line.end_column, line.row];
+        if (line.slanted) transect.push(line.end_row);
+    }
     view.report = await api(route() + '/reports', 'POST',
         {revision: view.photo.revision, title: byId('report-title').value, transect});
     byId('report-title').value = '';
